@@ -1,0 +1,51 @@
+---
+title: "R Notebook"
+output: github_document
+---
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(DarkKinaseTools)
+library(BerginskiRMisc)
+library(here)
+```
+
+```{r}
+curve_data = read_csv('Johnson_005 Rev Curve TD Top3 y-ions - 061818.csv')
+
+# temp = curve_data %>% filter(`Peptide Sequence`=="YNAVTGEWLDDEVLIK")
+
+curve_data$uniprot_ids = str_match(curve_data$`Protein Name`,"[|](.+)[|]\\w+_")[,2]
+
+curve_data = curve_data %>% left_join(all_kinases)
+
+dir.create(here('PRM_standard_curves'))
+
+proteomics_curves = data.frame(Gene=character(),
+                               Peptide=character(),
+                               filename=character())
+
+for (this_gene in unique(curve_data$symbol)) {
+  gene_data = curve_data %>% filter(symbol == this_gene)
+  for (this_peptide in unique(gene_data$`Peptide Sequence`)) {
+    this_data = gene_data %>% filter(`Peptide Sequence` == this_peptide)
+
+    ggplot(this_data, aes(x=Concentration,
+                          y=`Total Area`,
+                          color=`Isotope Label Type`)) +
+      geom_point() + scale_x_log10() + scale_y_log10() +
+      ggtitle(paste0(this_gene, "-", this_peptide)) +
+      theme_berginski()
+                
+    ggsave(here('PRM_standard_curves',paste0(this_gene,"-",this_peptide, ".svg")))
+    
+    proteomics_curves = proteomics_curves %>%
+      add_row(Gene = this_gene,
+              Peptide = this_peptide,
+              filename = paste0(this_gene,"-",this_peptide, ".svg"))
+  }
+}
+
+write_csv(proteomics_curves,here('curve_info.csv'))
+```
