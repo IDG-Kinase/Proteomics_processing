@@ -67,19 +67,29 @@ for (row_num in 1:dim(curve_summary)[1]) {
 }
 
 deep_dive_data = deep_dive_data %>% left_join(curve_summary)
+curve_info = data_frame(Gene = character(),
+                        Peptide = character(), 
+                        Reverse_filename = character(),
+                        Forward_filename = character())
 ```
 
 # Plotting
 
-```{r plot_reverse_curves}
+```{r plot_reverse_curves, fig.width=6, fig.height=6}
 deep_dive_reverse = deep_dive_data %>%
   filter(curve_type == "Reverse")
 
 reverse_curves = list()
 
+# deep_dive_reverse = deep_dive_data %>%
+#   filter(curve_type == "Reverse", peptide_start == "ISA")
+
 build_peptide_reverse_curve <- function(this_peptide_data) {
+
+  low_val_min = sort(unique(this_peptide_data$Theor_conc[which(this_peptide_data$Theor_conc > this_peptide_data$lod[1])]))[3]
+  
   this_peptide_low_vals = this_peptide_data %>%
-    filter(Theor_conc < 20)
+    filter(Theor_conc <= low_val_min)
   
   full_range_plot <- ggplot(this_peptide_data,aes(x=Theor_conc,y=Meas_conc)) +
     geom_point() +
@@ -87,9 +97,10 @@ build_peptide_reverse_curve <- function(this_peptide_data) {
     labs(x="Theoretical Concentration (fmol/\U00B5L)",y="Measured Concentration (fmol/\U00B5L)") +
     geom_abline(slope = this_peptide_data$correlation_plot_slope[1],
                 intercept = this_peptide_data$correlation_plot_intercept[1],
-                color='blue') +
-    geom_abline(slope = this_peptide_data$response_curve_slope[1],
-                intercept = this_peptide_data$response_curve_intercept[1]) +
+                color='blue',
+                lwd=1.5,
+                alpha=0.75) +
+    geom_abline(slope = 1, intercept = 0, lwd=1.5, alpha=0.75) +
     ggtitle(paste0(this_peptide_data$kinase," - ", this_peptide_data$peptide)) +
     geom_text(aes(x = max(this_peptide_data$Theor_conc),
                   y = 1,
@@ -106,11 +117,13 @@ build_peptide_reverse_curve <- function(this_peptide_data) {
     geom_point() +
     theme_berginski() +
     labs(x="",y="") +
-    geom_abline(slope = this_peptide_low_vals$correlation_plot_slope[1],
-                intercept = this_peptide_low_vals$correlation_plot_intercept[1],
-                color='blue') +
-    geom_abline(slope = this_peptide_low_vals$response_curve_slope[1],
-                intercept = this_peptide_low_vals$response_curve_intercept[1])
+    geom_abline(slope = this_peptide_data$correlation_plot_slope[1],
+                intercept = this_peptide_data$correlation_plot_intercept[1],
+                color='blue',
+                lwd=1.5,
+                alpha=0.75) +
+    geom_abline(slope = 1, intercept = 0, lwd=1.5, alpha=0.75) +
+    NULL
   
   combined_plot <- ggdraw() +
     draw_plot(full_range_plot) +
@@ -121,14 +134,14 @@ build_peptide_reverse_curve <- function(this_peptide_data) {
 dir.create(here('simple_X_Y','figures'),showWarnings = F)
 for (this_peptide in unique(deep_dive_reverse$peptide)) {
   this_peptide_data = deep_dive_reverse %>% filter(peptide == this_peptide)
-  
+
   this_kinase = this_peptide_data$kinase[1]
 
   reverse_curves[[this_kinase]][[this_peptide]] <- build_peptide_reverse_curve(this_peptide_data)
-  reverse_curves[[this_kinase]][[this_peptide]]
-  ggsave(here('simple_X_Y','figures',paste0(this_kinase,'-',this_peptide,'-Reverse.svg')), 
+
+  ggsave(here('simple_X_Y','figures','SVG',paste0(this_kinase,'-',this_peptide,'-Reverse.svg')),
          reverse_curves[[this_kinase]][[this_peptide]])
-  ggsave(here('simple_X_Y','figures',paste0(this_kinase,'-',this_peptide,'-Reverse.png')), 
+  ggsave(here('simple_X_Y','figures','PNG',paste0(this_kinase,'-',this_peptide,'-Reverse.png')),
          reverse_curves[[this_kinase]][[this_peptide]])
 }
 ```
@@ -155,7 +168,10 @@ build_peptide_forward_curve <- function(this_peptide_data) {
     theme_berginski() +
     labs(x="Concentration (fmol/\U00B5L)",y="Average Peak Area Ratio") +
     ggtitle(paste0(this_peptide_data$kinase," - ", this_peptide_data$peptide)) +
-    geom_smooth(method=lm,se=F) +
+    geom_abline(slope = this_peptide_data$response_curve_slope[1],
+                intercept = this_peptide_data$response_curve_intercept[1],
+                lwd=1.5,
+                alpha=0.75) +
     NULL
   
 
@@ -164,13 +180,16 @@ build_peptide_forward_curve <- function(this_peptide_data) {
     geom_text(aes(x = this_peptide_data$lod[1],
                   y = max(this_peptide_summary_low$mean_measured),
                   label = paste0('LOD=',this_peptide_data$lod[1])),
-              color='red',hjust="inward",vjust="inward",size=6) +
+                  color='red',hjust="inward",vjust="inward",size=6) +
     geom_point() +
     geom_errorbar(aes(ymin=mean_measured - sd_measured,ymax=mean_measured + sd_measured),
                   width=0.02*max(this_peptide_summary_low$Theor_conc)) +
     theme_berginski() +
     labs(x="",y="") +
-    geom_smooth(method=lm,se=F) +
+    geom_abline(slope = this_peptide_data$response_curve_slope[1],
+                intercept = this_peptide_data$response_curve_intercept[1],
+                lwd=1.5,
+                alpha=0.75) +
     NULL
 
   combined_plot <- ggdraw() +
@@ -186,10 +205,16 @@ for (this_peptide in unique(deep_dive_forward$peptide)) {
   this_kinase = this_peptide_data$kinase[1]
 
   forward_curves[[this_kinase]][[this_peptide]] <- build_peptide_forward_curve(this_peptide_data)
-  forward_curves[[this_kinase]][[this_peptide]]
-  ggsave(here('simple_X_Y','figures',paste0(this_kinase,'-',this_peptide,'-Forward.svg')),
+  curve_info = curve_info %>% add_row(Gene = this_kinase,
+                                      Peptide = this_peptide,
+                                      Reverse_filename = paste0(this_kinase,'-',this_peptide,'-Reverse.svg'),
+                                      Forward_filename = paste0(this_kinase,'-',this_peptide,'-Forward.svg'))
+  
+  ggsave(here('simple_X_Y','figures','SVG',paste0(this_kinase,'-',this_peptide,'-Forward.svg')),
          forward_curves[[this_kinase]][[this_peptide]])
-  ggsave(here('simple_X_Y','figures',paste0(this_kinase,'-',this_peptide,'-Forward.png')),
+  ggsave(here('simple_X_Y','figures','PNG',paste0(this_kinase,'-',this_peptide,'-Forward.png')),
          forward_curves[[this_kinase]][[this_peptide]])
 }
+
+write_csv(curve_info,here('simple_X_Y/PRM_curve_data.csv'))
 ```
