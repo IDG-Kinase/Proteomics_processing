@@ -460,13 +460,18 @@ for (current_file in file_name) {
   output_dir = file.path("/home/mbergins/Documents/Projects/proteomics_processing/Plots","Single_PRM_Curves")
   dir.create(output_dir, showWarnings = FALSE)
   
+  output_dir_PAR = file.path("/home/mbergins/Documents/Projects/proteomics_processing/Plots","Single_Peak_Area_Ratio")
+  dir.create(output_dir_PAR, showWarnings = FALSE)
+  
   library(DarkKinaseTools)
   library(BerginskiRMisc)
+  library(stringr)
   
   proteomics_curves = data.frame(Gene=character(),
                                  Peptide=character(),
                                  filename=character())
   
+  # for (this_peptide in unique(df$Peptide)) {
   for (this_peptide in unique(df$Peptide)) {
     
     this_data_set = df %>% filter(Peptide == this_peptide)
@@ -493,7 +498,20 @@ for (current_file in file_name) {
       theme_berginski()
     
     ggsave(file.path(output_dir,paste0(hgnc_symbol,"-",peptide, ".svg")),this_plot,width=5,height=3)
+
+    this_plot = ggplot(this_data_set,aes(x= Theor_conc, y= PAR_.H.L.)) +
+      geom_point(shape=21, fill="#377eb8", size=2, alpha=.5) +
+      # geom_line(this_regression, mapping= aes(x= Theor_conc, y= Meas_conc), colour="red", size=1) + 
+      geom_hline(data=this_summary, aes(yintercept=LOB), linetype = "dashed", colour="#984ea3", size=.5) + 
+      geom_hline(data=this_summary, aes(yintercept=LOD), linetype = "solid", colour="#4daf4a", size=.5) +
+      labs(x='Theoretical Concentration (fmol/mg)',y='Peak Area Ratio (L/H)') +
+      scale_x_log10(limits=c(0.01,250),breaks=c(0.01, 0.1, 1, 10, 100), labels=c(0.01, 0.1, 1, 10, 100)) + 
+      # scale_y_log10(limits=c(0.01,250),breaks=c(0.01, 0.1, 1, 10, 100), labels=c(0.01, 0.1, 1, 10, 100)) +
+      theme_berginski()
     
+    ggsave(file.path(output_dir_PAR,paste0(hgnc_symbol,"-",peptide, ".svg")),this_plot,width=5,height=3)
+    
+        
     proteomics_curves = proteomics_curves %>%
       add_row(Gene = hgnc_symbol,
               Peptide = peptide,

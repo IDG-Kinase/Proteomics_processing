@@ -74,7 +74,7 @@ LoB.Est.method <- function(x)
   
 }
 
-
+library(tidyverse)
 my_theme <- theme_bw() +
   theme(
     axis.text.x  = element_text(angle=0, vjust=0.5, size=12),   # rotate x-axis label and define label size
