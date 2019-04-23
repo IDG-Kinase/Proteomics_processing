@@ -64,6 +64,55 @@ curve_info = data_frame(Gene = character(),
                         Peptide = character(),
                         Reverse_filename = character(),
                         Forward_filename = character())
+
+
+
+```
+
+```{r write_curve_summary}
+curve_summary_output = read_excel(here('simple_XY/PARM TABLE.xlsx'),skip=1) %>%
+  #toss out any protein names that are NA, these are the notes at the end of the table
+  filter(!is.na(`Protein Name`)) %>%
+  
+  #round the LOQ value as appears in the spreadsheet
+  mutate(`LOQ (fmol)3` = round(`LOQ (fmol)3`,2)) %>%
+  
+  #We need the last character of the peptide sequence to be bolded, in HTML
+  #<b>text</b>, so we split the last charater off and wrap it in the appropriate
+  #tag and then toss out the columns it was split into
+  separate(`Peptide Sequence`,into=c('start_pep','end_pep'),sep=-1) %>%
+  mutate(`Peptide Sequence`=paste0(start_pep,'<b>',end_pep,'</b>')) %>%
+  select(-start_pep,-end_pep) %>%
+  
+  #This split and rebuild then messes with the column order, so switch it back
+  #to the original
+  select(`Gene Symbol`,`Protein Name`,`Peptide Sequence`,everything()) %>%
+  
+  #Change these columns to the HTML equivalents
+  rename(`LOD (fmol)<sup>2</sup>` = `LOD (fmol)2`) %>%
+  rename(`LOQ (fmol)<sup>3</sup>` = `LOQ (fmol)3` )
+  
+#The first peptide entry needs some extra HTML markup, fix that here
+curve_summary_output$`Peptide Sequence`[1] = "DTGELVAL<b>K</b><sup>1</sup>"
+write_csv(curve_summary_output,here('simple_X_Y_figures/param_table.csv'))
+
+
+pep_seq_table = read_excel(here('simple_XY/PEP-SEQ-TAB.xlsx'),skip=1) %>%
+  #toss out any protein names that are NA, these are the notes at the end of the table
+  filter(!is.na(`Protein Name`)) %>%
+  
+  #We need the last character of the peptide sequence to be bolded, in HTML
+  #<b>text</b>, so we split the last charater off and wrap it in the appropriate
+  #tag and then toss out the columns it was split into
+  separate(`Peptide Sequence`,into=c('start_pep','end_pep'),sep=-1) %>%
+  mutate(`Peptide Sequence`=paste0(start_pep,'<b>',end_pep,'</b>')) %>%
+  select(-start_pep,-end_pep) %>%
+  select(`Gene Symbol`, `Protein Name`, `Peptide Identifier`, `Peptide Sequence`)
+
+
+#The first peptide entry needs some extra HTML markup, fix that here
+pep_seq_table$`Peptide Sequence`[1] = "DTGELVAL<b>K</b><sup>1</sup>"
+write_csv(pep_seq_table,here('simple_X_Y_figures/pep_seq_table.csv'))
 ```
 
 # Plotting
@@ -110,7 +159,7 @@ build_peptide_reverse_curve <- function(this_peptide_data) {
                   y = 1,
                   label = summary_text),
               hjust="inward",vjust="inward",size=8) +
-    theme(legend.position = "none") +
+    # theme(legend.position = "none") +
     NULL
   
   zoom_plot <- ggplot(this_peptide_low_vals,aes(x=Theor_conc,y=Meas_conc,shape=Ion)) +
