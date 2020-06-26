@@ -67,25 +67,45 @@ for (i in 1:length(excel_sheets(here('simple_XY/072919 file set/Dark Kinome set 
 ```
 
 ```{r read_in_curve_summary}
-curve_summary = read_excel(here('simple_XY/Deep Dive plot parameters.xlsx')) %>%
+# curve_summary = read_excel(here('simple_XY/Deep Dive plot parameters.xlsx')) %>%
+#   clean_names() %>%
+#   mutate(peptide_start = str_extract(peptide,'.{3}')) %>%
+#   filter(!is.na(gene_symbol)) %>%
+#   rename(correlation_plot_slope = reverse_curve_slope,
+#          correlation_plot_intercept = reverse_curve_y_intercept,
+#          response_curve_slope = forward_curve_slope,
+#          response_curve_intercept = forward_curve_y_intercept)
+# 
+# curve_summary$correlation_plot_slope = as.numeric(curve_summary$correlation_plot_slope)
+# curve_summary$correlation_plot_intercept = as.numeric(curve_summary$correlation_plot_intercept)
+# curve_summary$response_curve_slope = as.numeric(curve_summary$response_curve_slope)
+# curve_summary$response_curve_intercept = as.numeric(curve_summary$response_curve_intercept)
+
+# temp = deep_dive_data %>% left_join(curve_summary)
+
+curve_summary = read_excel(here('simple_XY/072919 file set/PARM TABLE.xlsx'),skip=1) %>%
   clean_names() %>%
-  mutate(peptide_start = str_extract(peptide,'.{3}')) %>%
-  filter(!is.na(gene_symbol)) %>%
-  rename(correlation_plot_slope = reverse_curve_slope,
-         correlation_plot_intercept = reverse_curve_y_intercept,
-         response_curve_slope = forward_curve_slope,
-         response_curve_intercept = forward_curve_y_intercept)
+  #clear out the lines without data present
+  filter(!is.na(protein_name)) %>%
+  mutate(lod_fmol_2 = as.numeric(lod_fmol_2),
+         loq_fmol_3 = as.numeric(loq_fmol_3)) %>%
+  #rename vars to help with matching and make a cleaner name
+  rename(lod = lod_fmol_2, peptide = peptide_sequence) %>%
+  #manually correct the first peptide marked with the 1
+  mutate(peptide = ifelse(peptide == "DTGELVALK1", "DTGELVALK",peptide)) %>%
+  identity()
 
-curve_summary$correlation_plot_slope = as.numeric(curve_summary$correlation_plot_slope)
-curve_summary$correlation_plot_intercept = as.numeric(curve_summary$correlation_plot_intercept)
-curve_summary$response_curve_slope = as.numeric(curve_summary$response_curve_slope)
-curve_summary$response_curve_intercept = as.numeric(curve_summary$response_curve_intercept)
+responce_curve_data = as.tibble(str_match(curve_summary_part2$calibration_curve_equation,'y=(-)*([^x]+)x\\+*(.*)'))
+colnames(responce_curve_data) <- c("matched_eq","slope_sign","correlation_plot_slope","correlation_plot_intercept")
+responce_curve_data = responce_curve_data %>%
+  mutate(correlation_plot_slope = as.numeric(correlation_plot_slope)) %>%
+  mutate(correlation_plot_intercept = as.numeric(correlation_plot_intercept))
 
-deep_dive_data = deep_dive_data %>% left_join(curve_summary)
-curve_info = tibble(Gene = character(),
-                    Peptide = character(),
-                    Reverse_filename = character(),
-                    Forward_filename = character())
+curve_summary$correlation_plot_slope = responce_curve_data$correlation_plot_slope
+curve_summary$correlation_plot_intercept = responce_curve_data$correlation_plot_intercept
+
+deep_dive_data = deep_dive_data %>% 
+  left_join(curve_summary %>% select(peptide,lod,correlation_plot_slope,correlation_plot_intercept))
 ```
 
 ```{r write_curve_summary}
@@ -150,12 +170,12 @@ reverse_curves = list()
 # deep_dive_reverse = deep_dive_data %>%
 #   filter(curve_type == "Reverse", peptide_start == "ISA")
 
+reverse_curve_info = tibble(Gene = character(),
+                            Peptide = character(),
+                            Reverse_filename = character())
+
 build_peptide_reverse_curve <- function(this_peptide_data) {
 
-  low_val_min = sort(unique(this_peptide_data$Theor_conc[which(this_peptide_data$Theor_conc > this_peptide_data$lod[1])]))[3]
-  
-  this_peptide_low_vals = this_peptide_data %>%
-    filter(Theor_conc <= low_val_min)
   
   intercept_text = ifelse(this_peptide_data$correlation_plot_intercept[1] > 0,
                           paste0("+",round(this_peptide_data$correlation_plot_intercept[1],3)),
@@ -185,6 +205,17 @@ build_peptide_reverse_curve <- function(this_peptide_data) {
               hjust="inward",vjust="inward",size=8) +
     # theme(legend.position = "none") +
     NULL
+
+  #The zoom plot should consist of the lowest three values in the full plot, that are above the limit of detection
+  sorted_vals_above_lod = sort(unique(this_peptide_data$Theor_conc[which(this_peptide_data$Theor_conc > this_peptide_data$lod[1])]))
+  if (length(sorted_vals_above_lod) >= 3) {
+    low_val_min = sorted_vals_above_lod[3]
+  } else {
+    low_val_min = sorted_vals_above_lod[length(sorted_vals_above_lod)]
+  }
+  
+  this_peptide_low_vals = this_peptide_data %>%
+    filter(Theor_conc <= low_val_min)
   
   zoom_plot <- ggplot(this_peptide_low_vals,aes(x=Theor_conc,y=Meas_conc,shape=Ion)) +
     # geom_vline(xintercept = this_peptide_low_vals$lod[1], color='red') +
@@ -224,7 +255,13 @@ for (this_peptide in unique(deep_dive_reverse$peptide)) {
          reverse_curves[[this_kinase]][[this_peptide]])
   ggsave(here('simple_X_Y_figures','PNG',paste0(this_kinase,'-',this_peptide,'-Reverse.png')),
          reverse_curves[[this_kinase]][[this_peptide]])
+  
+  reverse_curve_info = reverse_curve_info %>%
+    add_row(Gene = this_kinase,
+            Peptide = this_peptide,
+            Reverse_filename = paste0(this_kinase,'-',this_peptide,'-Reverse.svg'))
 }
+write_csv(reverse_curve_info, here('simple_X_Y_figures/PRM_reverse_curve_data.csv'))
 ```
 
 ```{r plot_forward_curves}
