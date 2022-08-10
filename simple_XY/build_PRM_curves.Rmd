@@ -95,7 +95,7 @@ curve_summary = read_excel(here('simple_XY/072919 file set/PARM TABLE.xlsx'),ski
   mutate(peptide = ifelse(peptide == "DTGELVALK1", "DTGELVALK",peptide)) %>%
   identity()
 
-responce_curve_data = as.tibble(str_match(curve_summary_part2$calibration_curve_equation,'y=(-)*([^x]+)x\\+*(.*)'))
+responce_curve_data = as.tibble(str_match(curve_summary$calibration_curve_equation,'y=(-)*([^x]+)x\\+*(.*)'))
 colnames(responce_curve_data) <- c("matched_eq","slope_sign","correlation_plot_slope","correlation_plot_intercept")
 responce_curve_data = responce_curve_data %>%
   mutate(correlation_plot_slope = as.numeric(correlation_plot_slope)) %>%
