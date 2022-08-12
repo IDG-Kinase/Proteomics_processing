@@ -1,0 +1,121 @@
+---
+title: "Build Forward/Reverse Curves"
+author: "Matthew Berginski"
+date: "2022-08-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here)
+library(janitor)
+library(patchwork)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Foward Curves
+
+```{r}
+forward_curve_points = read_delim(here('2022_attempt/Forward Curve/Johnson_046 FWD PCS 092721 - LOD Filtered regression inputs.txt')) %>%
+  clean_names() %>%
+  extract(peptide, regex = "\\|.*?\\|(.*)_HUMAN\\.(.*)", into = c('gene_name','peptide'))
+
+
+forward_curve_regression = read_delim(here('2022_attempt/Forward Curve/Summary_data.txt')) %>%
+  clean_names() %>%
+  extract(peptide, regex = "\\|.*?\\|(.*)_HUMAN\\.(.*)", into = c('gene_name','peptide'))
+```
+
+```{r}
+build_forward_curve <- function(this_peptide_data, regression_data, plot_title) {
+  regression_eqn = paste0('y=',signif(regression_data$lm_slope,2),'x',
+                          ifelse(regression_data$lm_intercept>0,"+",""), signif(regression_data$lm_intercept,2))
+  plot_text = paste0(this_peptide_data$gene_name[1],"\n",this_peptide_data$peptide[1],"\n",
+                     regression_eqn, "\n",
+                     paste0("LOD=",signif(regression_data$lod,2),' fmol'))
+  
+  forward_curve = ggplot(this_peptide_data, 
+                         aes(x=theor_conc, y=meas_conc, shape=fragment_ions)) + 
+    geom_point() + 
+    geom_abline(slope = regression_data$lm_slope, intercept = regression_data$lm_intercept) +
+    annotate(geom='text',label=plot_text,x=Inf,y=-Inf,hjust=1,vjust=-0.1) +
+    labs(x = "Theortical Concentration (fmol/\u00B5)",
+         y = "Measured Concentration (fmol/\u00B5)",
+         shape = "Ion",
+         title = plot_title) +
+    BerginskiRMisc::theme_berginski()
+  
+  return(forward_curve)
+}
+```
+
+```{r}
+dir.create(here('2022_attempt/plots'))
+
+forward_curve_plots = list()
+
+for (this_gene in unique(forward_curve_points$gene_name)) {
+  all_gene_data = forward_curve_points %>% filter(gene_name == this_gene)
+  for (this_peptide in unique(all_gene_data$peptide)) {
+    regression_data = forward_curve_regression %>%
+      filter(gene_name == this_gene, peptide == this_peptide)
+    
+    this_peptide_data = all_gene_data %>% filter(peptide == this_peptide)
+    
+    plot_title = "Forward Curve"
+    
+    forward_curve_plots[[this_gene]][[this_peptide]] = build_forward_curve(this_peptide_data, regression_data, plot_title)
+  }
+}
+```
+
+# Reverse Curves
+
+```{r}
+reverse_curve_points = read_delim(here('2022_attempt/Reverse Curve/Johnson_045 REV TD 092721 regression inputs.txt')) %>%
+  clean_names() %>%
+  extract(peptide, regex = "\\|.*?\\|(.*)_HUMAN\\.(.*)", into = c('gene_name','peptide'))
+
+
+reverse_curve_regression = read_delim(here('2022_attempt/Reverse Curve/Summary_data.txt')) %>%
+  clean_names() %>%
+  extract(peptide, regex = "\\|.*?\\|(.*)_HUMAN\\.(.*)", into = c('gene_name','peptide'))
+```
+
+```{r}
+reverse_curve_plots = list()
+
+for (this_gene in unique(reverse_curve_points$gene_name)) {
+  all_gene_data = reverse_curve_points %>% filter(gene_name == this_gene)
+  for (this_peptide in unique(all_gene_data$peptide)) {
+    regression_data = reverse_curve_regression %>%
+      filter(gene_name == this_gene, peptide == this_peptide)
+    
+    this_peptide_data = all_gene_data %>% filter(peptide == this_peptide)
+    
+    plot_title = "Reverse Curve"
+    
+    reverse_curve_plots[[this_gene]][[this_peptide]] = build_forward_curve(this_peptide_data, regression_data, plot_title)
+  }
+}
+```
+
+# Output Plots
+
+```{r}
+for (this_gene in names(forward_curve_plots)) {
+  for (this_peptide in names(forward_curve_plots[[this_gene]])) {
+    output_filename = here('2022_attempt/plots/', paste0(this_gene,"-",this_peptide,'.png'))
+    
+    ggsave(output_filename,
+           forward_curve_plots[[this_gene]][[this_peptide]] + 
+             reverse_curve_plots[[this_gene]][[this_peptide]] + 
+             plot_layout(guides = "collect") & 
+             theme(legend.position = 'bottom', legend.margin=margin(0,0,0,0), legend.box.margin=margin(-10,-10,-10,-10)),
+           width=6,height=3.5)
+    
+    BerginskiRMisc::trimImage(output_filename)
+  }
+}
+```
